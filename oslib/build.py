@@ -1,6 +1,6 @@
 # A set of method to build an instance
 import re
-from oslib import osinit
+from oslib import osinit, OSLibError
 import subprocess
 import time
 from oslib.mime_utils import MimeMessage, URL
@@ -37,6 +37,7 @@ def file_parser(parser):
     parser.add_option("-F", "--Fact", dest="local_facts", help="Local facts", default={}, action="callback", callback=parse_facts, nargs=2, type="string")
     parser.add_option("-H", "--hostname", dest="hostname", help="Set the hostname", default=None)
     parser.add_option("-T", "--template", dest="template", help="template file", default=None)
+    parser.add_option("-V", "--variable", dest="variables", help="Variables", default=[], action='append')
     parser.add_option("-r", "--ressource", dest="ressource", help="embedded ressource to add", default=[], action='append')
     parser.add_option("-R", "--ressources_dir", dest="ressources_dir", help="ressource dir search path", default=[], action='append')
     parser.add_option("-e", "--elastic_ip", dest="elastic_ip", help="create and associate an EIP for this vm", default=None, action="store_true")
@@ -47,6 +48,15 @@ def file_parser(parser):
 def build_user_data(user_data_properties, **kwargs):
     user_data = MimeMessage()
     
+    for var in kwargs.pop('variables'):
+        var_content = var.split('=')
+        if len(var_content) != 2:
+            raise OSLibError("Invalide variable: %s" % var)
+        user_data_properties[var_content[0]] = var_content[1]
+    
+    if len(user_data_properties) > 0:
+        user_data.append(user_data_properties)
+
     hostname = kwargs.pop('hostname')
     if hostname != None:
         user_data.append("#!/bin/bash\nhostname %s && uname -a" % hostname)
@@ -59,22 +69,23 @@ def build_user_data(user_data_properties, **kwargs):
             user_data_string += "%s: %s\n" % (k, ",".join(v))
         user_data.append(user_data_string, content_type='application/facter-yaml', filename='localfacts.yaml')
 
-    if len(user_data_properties) != 0:
-        user_data.append(user_data_properties)
-
-    url_commands = kwargs.pop('url_commands', None)
-    if url_commands != None:
+    url_commands = kwargs.pop('url_commands')
+    if len(url_commands) > 0:
         user_data.append(url_commands)
     
     root_embedded = oslib.resources.__path__
     search_path = [ root_embedded[0] ]
     search_path.extend(kwargs.pop('ressources_dir'))
     for r in kwargs.pop('ressource'):
+        done = False
         # look for the ressource in the ressources search path
         for path in search_path:
             ressource_path = os.path.join(path, r)
             if os.path.exists(ressource_path):
                 user_data.append(content_file_path=ressource_path)
+                done = True
+        if not done:
+            raise OSLibError("ressource not found: %s" % r)
 
     kwargs['user_data'] = "%s" % user_data
     return kwargs

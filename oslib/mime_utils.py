@@ -6,6 +6,7 @@ from email.MIMEBase import MIMEBase
 from email.MIMEMultipart import MIMEMultipart
 from osinit import guess_mime_type
 import StringIO
+from oslib import OSLibError
 
 import mimetypes
 
@@ -55,7 +56,9 @@ class MimeMessage(object):
 
         if message != None:
             self.message.attach(message)
-    
+        else:
+            raise OSLibError("Empty part added to user_data")
+
     def text_content(self, content, subtype='plain'):
         return MIMEText(content, _subtype=subtype)
     
