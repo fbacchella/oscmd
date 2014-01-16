@@ -64,6 +64,9 @@ if len(args) > 0:
     else:
         ec2_object_type = None
 
+    if not ec2_object_name in oslib.objects:
+        print 'unknonw object: %s' % ec2_object_name
+        sys.exit(253)
     #The object parser
     parser_object = optparse.OptionParser()
     parser_object.disable_interspersed_args()

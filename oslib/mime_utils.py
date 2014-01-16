@@ -44,7 +44,9 @@ class MimeMessage(object):
             else:
                 message = MIMEBase(maintype, subtype)
                 message.set_payload(content)
-                Encoders.encode_base64(message)
+                #Dont base64 encode rfc822 message, they will not be parsed
+                if not content_type == 'message/rfc822':
+                    Encoders.encode_base64(message)
             
         if content_encondig != None:
             message['Content-Encoding'] =  content_encondig

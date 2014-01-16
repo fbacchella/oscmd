@@ -13,6 +13,7 @@ import oslib
 import socket
 import oslib.ec2_objects
 import yaml
+import oslib.resources
 
 def parse_facts(option, opt_str, value, parser, *args, **kwargs):
     (key,value) = value
@@ -36,7 +37,7 @@ def file_parser(parser):
     parser.add_option("-F", "--Fact", dest="local_facts", help="Local facts", default={}, action="callback", callback=parse_facts, nargs=2, type="string")
     parser.add_option("-H", "--hostname", dest="hostname", help="Set the hostname", default=None)
     parser.add_option("-T", "--template", dest="template", help="template file", default=None)
-    parser.add_option("-r", "--ressource", dest="embedded_ressources", help="embedded ressource to add", default=[], action='append')
+    parser.add_option("-r", "--ressource", dest="ressource", help="embedded ressource to add", default=[], action='append')
     parser.add_option("-R", "--ressources_dir", dest="ressources_dir", help="ressource dir search path", default=[], action='append')
     parser.add_option("-e", "--elastic_ip", dest="elastic_ip", help="create and associate an EIP for this vm", default=None, action="store_true")
     parser.add_option("-I", "--private_ip", dest="private_ip_address", help="set this IP, if instance is in a VPC", default=None)
@@ -65,20 +66,16 @@ def build_user_data(user_data_properties, **kwargs):
     if url_commands != None:
         user_data.append(url_commands)
     
-    embedded_commands = kwargs.pop('embedded_ressources', None)
-    if embedded_commands != None:
-        import oslib.resources
-        root_embedded = oslib.resources.__path__
-        search_path = [ root_embedded[0] ]
-        search_path.extend(kwargs['ressources_dir'])
-        for c in embedded_commands:
-            # look for the ressource in the ressources search path
-            for path in search_path:
-                command_path = os.path.join(path, c)
-                if os.path.exists(command_path):
-                    user_data.append(content_file_path=command_path)
+    root_embedded = oslib.resources.__path__
+    search_path = [ root_embedded[0] ]
+    search_path.extend(kwargs.pop('ressources_dir'))
+    for r in kwargs.pop('ressource'):
+        # look for the ressource in the ressources search path
+        for path in search_path:
+            ressource_path = os.path.join(path, r)
+            if os.path.exists(ressource_path):
+                user_data.append(content_file_path=ressource_path)
 
-    del kwargs['ressources_dir']
     kwargs['user_data'] = "%s" % user_data
     return kwargs
 
@@ -209,27 +206,32 @@ def do_build(ctxt, **kwargs):
     
     image = kwargs.pop('image_id', None)
 
-    #
+    ###########
     # Check device mapping
+    ###########
     volumes = BlockDeviceMapping(conn)
-    l = 'f'
+    first_volume = 'f'
+    l = first_volume
     
     for volume_info in kwargs.pop('volume_size', []):
         volumes["/dev/sd%s"%l] = BlockDeviceType(connection=conn, size=volume_info)
         l = chr( ord(l[0]) + 1)
 
-    # if drive letter is not d, some volumes definition was found
-    if l != 'd':
+    # if drive letter is not f, some volumes definition was found
+    if l != first_volume:
         kwargs['block_device_map'] = volumes
         user_data_properties['volumes'] = ' '.join(volumes.keys())
 
-    # after user_data_properties['volumes']  as the will be lvm'ed
+    # after user_data_properties['volumes']  otherwise they will be lvm'ed
     for snapshot_id in kwargs.pop('snap_id', []):
         volumes["/dev/sd%s"%l] = BlockDeviceType(connection=conn, snapshot_id=snapshot_id)
         l = chr( ord(l[0]) + 1)
     
     kwargs = build_user_data(user_data_properties, **kwargs)
 
+    ###########
+    # Check elastic IP
+    ###########
     if kwargs['elastic_ip']:
         eip = True
     else:

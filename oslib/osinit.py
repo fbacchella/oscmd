@@ -222,6 +222,7 @@ class MimeDecode(MimeManipulation):
         first = True
         if msg.is_multipart() or msg.get_content_maintype() == 'multipart':
             for part in msg.walk():
+                # skip the first part, it's the whole message again
                 if first:
                     first = False
                     continue
