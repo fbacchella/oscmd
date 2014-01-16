@@ -1,0 +1,10 @@
+[Boto]
+ec2_region_name = outscale
+ec2_region_endpoint = api.outscale.com
+debug = 0
+
+[Credentials]
+aws_access_key_id = your outscale access key
+aws_secret_access_key = your outscale private access key
+key_name = your ssh key name
+key_file = your ssh private key file

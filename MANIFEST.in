@@ -1,0 +1,2 @@
+include oslib/resources/*
+include oslib/dotboto.sample

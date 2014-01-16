@@ -1,0 +1,264 @@
+[[PageOutline]]
+
+oscmd permet de s'interfacer avec l'API Amazon, que ce soit directement chez Amazon, ou chez Outscale.
+
+Il est écrit en python et utilise la librairie [https://github.com/boto/boto boto].
+
+L'URL du VCS est http://ng/svn/production/outscale/oscmd.
+
+== Installation ==
+
+oscmd utilise Distutils. Il suffit donc d'exécuter la commande :
+{{{
+cd .../oscmd && python setup.py install
+}}}
+
+pour installer oscmd. Cette commande nécessite les droits {{{root}}}. Pour une installation par l'utilisateur, différentes solutions sont possibles :
+{{{
+cd .../oscmd && python setup.py install --user
+}}}
+qui installera dans {{{$HOME/.local}}}
+
+{{{
+cd .../oscmd && python setup.py install --home=<dir>
+}}}
+qui installera dans {{{$HOME/.local}}}
+
+Avec virtualenv, pour disposer d'un environnement dédié mais tout de même léger :
+{{{
+virtualenv --no-pip --never-download .../vmtools
+.../vmtools/bin/easy_install .../oscmd
+}}}
+
+Si l'installation via l'une ou l'autre méthode annonce des erreurs de compilation de {{{ext/_yaml.c}}}, ils sont sans conséquences. 
+Dans tout les cas, l'outil oscmd sera alors installé dans ../${ROOTISNTALL}/bin/oscmd
+
+== Installation pour windows ==
+
+Pour faire tourner oscmd dans un environnement windows, il faut installer
+  1. [http://www.python.org/download/releases/2.7.5/ Python pour windows]
+  2. [https://bitbucket.org/pypa/setuptools/raw/bootstrap/ez_setup.py Setuptools] 
+  3. [http://sourceforge.net/projects/pywin32/files/ Python for Windows extensions]
+
+Il est alors possible d'installer oscmd selon l'une des procédures précédentes.
+
+== Règle d'usage ==
+
+La ligne de commande d'oscmd respecte la syntaxe :
+{{{
+oscmd [args] objet [ verbe] verbe [args]
+}}}
+
+Objet correspond à un objet AWS : AMI, EIP, volume, instance,...
+Verbe correspond au type d'action que l'on souhaite réaliser sur cette objet : run, terminate, delete...
+
+Chaque élément peut être modifié selon l'ensemble des arguments qui le suivent immédiatement. De cette façon chaque élément possède son propre espace d'argument, sans risque de collision : le -x de AMI n'est pas le -x de EIP.
+
+Pour chaque élément la commande -h liste les éléments de niveau supérieur :
+{{{ oscmd -h }}} renvoie la liste des objets, etc.
+
+=== identification de l'objet ===
+
+En règle générale, les objets prennent un argument -i ou -n permettant d'identifier l'objet. Avec {{{-i}}}, il est identifié par son identifiant AWS, {{{-n}}} identifie l'objet par le nom, en général la valeur du tag {{{Name}}}.
+
+== Fichier de configuration ==
+
+boto peut utiliser un fichier de configure {{{$HOME/.boto}}}. L'élément racine (directement après l'appel de oscmd) prend l'argument -c pour spécifier un autre fichier de configuration. Il est possible de préciser le chemin du fichier de configuration dans la variable d'environnement {{{BOTO_CONFIG}}}.
+
+Le fichier de configuration contient les clauses et sections suivantes :
+ * [Boto]
+  * ec2_region_name : le nom de la region AWS
+  * ec2_region_endpoint : le hostname qui servira à construire l'URL de l'API
+  
+ * [Account]
+  * id : l'account id
+  * email : l'email du propriétaire de l'account
+
+ * [Credentials]
+  * aws_access_key_id : l'ID clé d'API AWS
+  * aws_secret_access_key : le secret de la clé d'API AWS
+  * key_file : le chemin de la clé ssh
+  * key_name : le nom de la clé ssh configuré
+  * user : le compte à utiliser lors d'une connexion ssh sur une instance.
+
+Chaque objet dispose d'une section où il peut récupérer les valeurs par défaut de son choix.
+
+Plus de détails sont disponible directement dans la documentation de boto : http://boto.readthedocs.org/en/latest/boto_config_tut.html
+
+== Options de base ==
+
+L'élément racine dispose des options suivantes :
+ * '''{{{-z | --zone= ZONE_NAME}}}''' qui permet de choisir une zone de disponibilité différente de celle par défaut
+ * '''{{{-e | --endpoint= ENDPOINT}}}''' qui permet de changer le host destination des appels d'API
+ * '''{{{-L | --listzone}}}''', qui génère une liste des zones de disponibilité pour cette région.
+
+Beaucoup d'objets gère le verbe {{{dump}}}, qui permet d'obtenir des informations détaillés. Donné avec un identifiant d'objet, il détail uniquement celui-ci. Si aucun n'est fournit tout les objets sont détaillés.
+
+De même le verbe {{{list}}} est fréquent, il permet d'obtenir une list des objets, selon un formatage qui peut être spécifié et et qui respect les règles de [http://docs.python.org/2/library/stdtypes.html#string-formatting de formatage de string] de python. La chaine de formatage est appliqué à un dictionnaire contenant les attributs de l'objet. 
+
+== L'objet ami ==
+
+L'objet ami accepte les verbes :
+ * run
+ * dump
+ * list
+ * make
+ * share
+ * exist
+
+=== run ===
+
+Le verbe {{{run}}} permet de créer une instance à partir d'une AMI.
+
+C'est une commande assez complexe, qui enrichie fortement la commande sous jacente AWS :
+ * '''{{{-n | --name= NAME}}}''' défini le nom de l'instance, c'est à dire qu'il posititionne le tag {{{Name}}}
+ * '''{{{-s | --volume_size= VOLUME_SIZE}}}''' crée on volume de la taille indiqué en giga et lui affecte automatiquement un device sd, il sera nommé NAME/sdx
+ * '''{{{-i | --snap_id= SNAP_ID}}}''' crée on volume à partir du snapshot indiqué  et lui affecte automatiquement un device sd, il sera nommé NAME/sdx
+ * '''{{{-U | --url= URL_COMMANDS}}}''' défini une URL d'où sera extrait un script de poste installation
+ * '''{{{-u | --user= USER}}}''' le compte à utiliser pour la connexion de post-installation
+ * '''{{{-f | --key_file= KEY_FILE}}}''' le fichier de la clé ssh à utiliser pour la connexion de post installation
+ * '''{{{-F | --Fact= LOCAL_FACTS}}}''' rajouter des faits statique à facter, qui peuvent être utilisé par puppet
+ * '''{{{-H | --hostname= HOSTNAME}}}''' force le hostname courant de la machine ; cette information n'est pas persistante
+ * '''{{{-T | --template= TEMPLATE}}}''' un fichier yaml de template qui permet de définir des valeurs par défaut pour des arguments
+ * '''{{{-r | --ressource= EMBEDDED_RESSOURCE}}}''' rajoute cette ressource dans le champ user_data, en fonction du type de ressource, des actions automatiques peuvent être exécutés
+ * '''{{{-R | --ressources= RESSOURCES}}}''' multi valué, permet de définir des chemins supplémentaires de ressources
+ * '''{{{-e | --elastic_ip}}}''' permet l'auto-allocation d'une elastic ip
+ * '''{{{-I | --private_ip= PRIVATE_IP_ADDRESS}}}''' permet de définir l'adresse IP privée, sur une machine dans un VPC Amazone
+ * '''{{{-P | --profile= INSTANCE_PROFILE_ARN }}}'''permet de définir le nom l'arn du profil d'instance IAM dans le cas d'une machine Amazon.
+
+Les commandes suivantes correspondent directement aux argument de [http://docs.aws.amazon.com/AWSEC2/latest/APIReference/ApiReference-query-RunInstances.html RunInstances ]
+ * '''{{{-t | --instance-type= INSTANCE}}}''' défini le type d'instance
+ * '''{{{-p | --placement= PLACEMENT}}}''' défini la zone de disponibilité
+ * '''{{{-S | --security_groups= SECURITY_GROUPS}}}''' défini un group de sécurité, il peut être répété
+ * '''{{{-k | --key_name= KEY_NAME}}}''' le nom de la clé ssh à autoriser.
+
+Un fichier de template est un fichier yaml qui permet d'éviter des lignes de commandes trop longue et incompréhensible, il contient une association (map au sens yaml) qui permet de définir une série de valeur par défaut.
+Il peut prendre les élements suivants :
+ * '''{{{instance_type}}}''' qui définit le type d'instance
+ * '''{{{security_groups}}}''' une énumération yaml de groupes de sécurité, qui sera remplacé si un argument -S est donné
+ * '''{{{embedded_commands}}}''' une énumération yaml de scripts de post-installation, qui sera remplacé si un argument -c est donné
+ * '''{{{local_facts}}}''' une association (map) entre un fact local et sa valeur, l'argument -F ne remplace que sa clé, en laissant les autres intouchée
+ * '''{{{volume_size}}}'''
+ * '''{{{elastic_ip}}}''' prend une valeur booléen
+si l'une des clé ami_name ou ami_id est défini, les arguments d'objet {{{-n}}} ou {{{-i}}} ne sont plus nécessaires.
+
+Cette commande prépare dans le champ user_data une série d'information encodé dans un objet mime une série d'objet et d'informations qui seront ensuite utilisé à la fin de l'installation pour préparer la machine.
+
+En fonction du type d'objet, les actions adéquates sont
+ * un rpm, qui sera automatiquement installé ;
+ * un exécutable shell ou python sera automatiquement exécuté ;
+ * un objet MIME de type multipart/mixed (extension .mime) sera extrait récursivement ;
+ * un objet MIME de type text/plain, associé à un Content-Disposition sera extrait à l'emplacement précisé.
+
+=== share ===
+
+Le verbe {{{share}}} permet de donner l'accès d'une AMI à plusieurs utilisateurs.
+
+ * '''{{{-u | --users USERS}}}''' donne une liste d'id d'utilisateurs pouvant accéder à cette AMI. La valeur par défaut de cette valeur est prise dans la clé share_users
+
+=== list ===
+
+Le verbe {{{list}}} permet d'énumérer les AMI accessibles.
+
+ * '''{{{-p | --pattern= PATTERN}}}''' utilise un motif format python. Il prendra comme argument la liste des attributs évoqué des ami, il faut donc utiliser des clés nommés : %(nom)s
+ * '''{{{-s | --showattributes}}}''' retourne la liste des attributs utilisable de l'AMI
+ * '''{{{-o | --owner= OWNER}}}''' restreint la liste des AMI à celle appartenant au compté donné, il utilise comme valeur par défaut la clé {{{owner}} de la section {{{ami}}} si elle existe
+ * '''{{{-O | --noowner}}}''' annule la valeur par défaut de l'option précédente
+
+== L'objet instance ==
+
+En plus des arguments usuels d'identification {{{-n}}} ou {{{-i}}}, l'objet instance permet l'identification avec l'argument {{{-s|--self}}} qui indique que l'instance à utiliser est celle sur laquelle la commande est lancée.
+
+Il accepte les verbes :
+  * console
+  * dump
+  * associate
+  * list
+  * ping
+  * reboot
+  * terminate
+  * stop
+  * start
+  * exist
+  * ssh
+  * addvolume
+  * attach
+
+=== terminate ===
+
+Le verbe {{{terminate}}} entraine la destruction d'une VM.
+
+* '''{{{-p | --purge}}}''' entraine la suppression d'une Elastic IP associée ainsi que des volumes.
+
+=== attach ===
+
+Le verbe {{{attach}}} attache à une instance un volume en utilisant son nom ou son ID.
+
+* '''{{{-i | --id= ID}}}''' identifie le volume par son id.
+* '''{{{-n | --name= NAME}}}''' identifie le volume par son nom.
+
+=== console ===
+
+Le verbe {{{console}}} permet de récupérer la console (série en générale) d'une VM.
+
+* '''{{{-f | --follow}}}''' permet de continuer à suivre l'affichage de la console.
+
+== L'objet volume ==
+
+L'objet {{{volume}}} accepte les verbes
+ * dump
+ * list
+ * attach
+ * detach
+ * delete
+
+=== attach ===
+
+Le verbe {{{attach}}} attache un volume à une instance donné.
+
+* '''{{{-i | --id= ID}}}''' identifie l'instance par son id.
+* '''{{{-n | --name= NAME}}}''' identifie l'instance par son nom.
+
+=== detach ===
+
+Le verbe {{{detach}}} détache un volume d'une instance.
+
+* '''{{{-f | --forced }}}''' force le détachement.
+
+
+== L'objet snapshot ==
+
+L'objet {{{snapshot}}} accepte les verbes
+ * delete
+ * list
+ * dump
+ * summary
+
+== L'objet eip ==
+
+L'identifiant utilisé pour cet objet est directement l'adresse IP. Il ne gère pas la notion de nom.
+
+== L'objet securitygroup ==
+
+L'objet {{{securitygroup}}} accepte les verbes
+ * dump
+ * create
+ * list
+ * exist
+ * add_rule
+ * remove_rule
+
+=== add_rule ===
+
+Ce verbe permet d'ajouter une ou plusieurs règles dans un groupe de sécurité
+
+ * '''{{{-p | --protocol= IP_PROTOCOL}}}''' le nom du procotol concernant cette règle, dans la liste icmp, udp, tcp. Si cette option est répété plusieurs fois, la définition sera appliqué à tout les protocoles indiqués.
+ * '''{{{-P  | --port_range= PORT_RANGE}}}''' la plage de port concernant, sous la forme {{{début:fin}}}. Un nombre seul indique un seul port, la chaine ALL indique tout les ports pour ce protocol ou tout les types pour ICMP.
+ * '''{{{-m | --mask= CIDR_IP}}}''' le réseau source, sous la forme CIDR c'est à dire A.B.C.D/bits.
+ * '''{{{-s | --source_group=}}}''' le group de sécurité source.
+
+Les options -m et -s sont exclusives.
+
+
+== L'objet keypair ==
+

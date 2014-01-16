@@ -1,0 +1,13 @@
+---
+instance_type: t1.micro
+security_groups: 
+  - public
+volume_size:
+  - 50
+  - 50
+embedded_commands:
+  - wrapvols
+  - puppetize
+ami_name: amzn-ami-pv-2013.03.1.x86_64-ebs
+elastic_ip: true
+  

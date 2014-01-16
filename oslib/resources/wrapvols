@@ -1,0 +1,39 @@
+#!/bin/bash
+
+function format() {
+    [ -b ${1}1 ] ||  sfdisk  --force -L -uS -q $1 << __EOF__
+2048,,8e
+__EOF__
+}
+
+function lv_create() {
+   pvcreate -M2 ${1}1
+   vgcreate vg_data ${1}1
+   vgscan
+   lvcreate -l 100%FREE -n lv_data vg_data
+   lvscan
+   mkfs.xfs -d su=1m,sw=1 -l sunit=2048 -L /data /dev/vg_data/lv_data
+}
+
+function lv_extend() {
+   vgextend vg_data ${1}1
+   vgscan
+}
+
+
+yum -y install xfsprogs lvm2
+for DISK in $volumes; do
+    DISK=$(readlink -e -n $DISK)
+    format $DISK
+    if [ ! -e "/dev/vg_data/lv_data" ] ; then
+        lv_create $DISK
+    else
+        lv_extend $DISK
+    fi
+done
+
+lvextend vg_data/lv_data -l +100%FREE
+lvscan
+
+[ -d /data ] || mkdir /data
+mount -L /data /data && xfs_growfs /data
