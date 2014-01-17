@@ -49,10 +49,10 @@ def build_user_data(user_data_properties, **kwargs):
     user_data = MimeMessage()
     
     for var in kwargs.pop('variables'):
-        var_content = var.split('=')
-        if len(var_content) != 2:
+        var_content = var.partition('=')
+        if len(var_content) != 3:
             raise OSLibError("Invalide variable: %s" % var)
-        user_data_properties[var_content[0]] = var_content[1]
+        user_data_properties[var_content[0]] = var_content[2]
     
     if len(user_data_properties) > 0:
         user_data.append(user_data_properties)
@@ -201,6 +201,11 @@ def do_build(ctxt, **kwargs):
 
     (tags,kwargs) = do_tags(**kwargs)
 
+    ###########
+    # Check VM naming
+    ###########
+    if 'Name' not in tags and kwargs['hostname'] != None:
+        tags['Name'] = kwargs['hostname']
     if 'Name' not in tags:
         yield "instance name is mandatory"
         return
