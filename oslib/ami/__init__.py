@@ -2,7 +2,7 @@ from run import Run
 from dump import Dump
 from share import Share
 from makeami import MakeAmi
-from oslib.command import GenericExist, List
+from oslib.command import GenericExist, List, Delete
 
 class Exist(GenericExist):
     """set exit code to 1 if the AMI don't exist """
@@ -32,4 +32,11 @@ class List(List):
         for ami in super(List, self).execute(*args, **kwargs):
             yield ami
 
-class_ref = [Run, Dump, Share, MakeAmi, Exist, List]
+class Delete(Delete):
+    object = 'ami'
+    verb = 'delete'
+    
+    def fill_parser(self, parser):
+        parser.add_option("-d", "--delete_snapshot", dest="delete_snapshot", help="delete associated snapshot", default=False, action="store_true")
+
+class_ref = [Run, Dump, Share, MakeAmi, Exist, List, Delete]

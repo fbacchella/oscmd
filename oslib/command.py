@@ -175,5 +175,8 @@ class AttachVolume(Command):
         else:
             return "attached as %s" % volume
 
-
+class Delete(Command):
+    
+    def execute(self, *args, **kwargs):
+        self.ec2_object.delete(*args, **kwargs)
     

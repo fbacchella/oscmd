@@ -1,7 +1,7 @@
 from dump import Dump
 from authorize import Authorize, DeAuthorize
 from oslib import OSLibError
-from oslib.command import Command, GenericExist, List
+from oslib.command import Command, GenericExist, List, Delete
 
 class Create(Command):
     object = 'securitygroup'
@@ -20,12 +20,9 @@ class Create(Command):
         
         self.ctxt.cnx_ec2.create_security_group(**kwargs)
 
-class Delete(Command):
+class Delete(Delete):
     object = 'securitygroup'
     verb = 'delete'
-    
-    def execute(self, *args, **kwargs):
-        self.ec2_object.get().delete()
 
 class Exist(GenericExist):
     """set exit code to 1 if the security group don't exist """

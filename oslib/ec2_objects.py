@@ -96,7 +96,7 @@ class EC2Object(object):
             newkwargs['filters'] = filters
         return self.__class__.get_all_func(self.ctxt.cnx_ec2, **newkwargs)
     
-    def delete(self):
+    def delete(self, *args, **kwargs):
         self.get().delete()
     
     def state(self):
@@ -127,6 +127,9 @@ class AMI(EC2Object):
             return None
         else:
             return None
+
+    def delete(self, delete_snapshot=False):
+        self.get().deregister(delete_snapshot)
 
 ec2_objects[AMI.name] = AMI
 
@@ -272,7 +275,6 @@ class Iam(EC2Object):
         return result
 
 ec2_objects[Iam.name] = Iam
-
 
 mapping = {
     "boto.ec2.instance.Instance": Instance,
