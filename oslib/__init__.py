@@ -1,4 +1,6 @@
 import boto
+import codecs
+import locale
 import optparse
 import sys
 
@@ -38,7 +40,11 @@ def get_cmd(context, ec2_object, verb):
           
     # Everything failed so return false
     return False
-            
+
+# needed because default unicode to ascii encoding is strict
+# we will use replace instead
+output_locale = locale.getpreferredencoding()
+
 def print_run_phrase(context, ec2_object, verb, args=None, **kwargs):
     (cmd, executed) = run_phrase(context, ec2_object, verb, args, **kwargs)
     if cmd == None:
@@ -50,7 +56,7 @@ def print_run_phrase(context, ec2_object, verb, args=None, **kwargs):
             if s != None:
                 string = cmd.to_str(s)
                 if string:
-                    print string,
+                    print codecs.encode(string, output_locale, 'replace'),
                     sys.stdout.flush()
         return cmd.status()
     # An exception was catched, print it
@@ -60,7 +66,7 @@ def print_run_phrase(context, ec2_object, verb, args=None, **kwargs):
     elif executed != None and executed:
         string = cmd.to_str(executed)
         if string:
-            print string
+            print codecs.encode(string, output_locale, 'replace'),
         return cmd.status()
     #It return false, something went wrong
     elif executed != None:
