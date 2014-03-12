@@ -1,0 +1,37 @@
+#!/bin/bash
+
+#exec >/var/log/cleaner.log 2>&1
+
+for f in  /var/log/{udev,boot.log,btmp,cron,cups/error_log,dmesg,lastlog,faillog,mail/statistics,maillog,messages,secure,wtmp,syslog,mail*}; do
+    [ -f $f ] && cat /dev/null > $f
+done
+
+for f in /var/log/{sa/*,dmesg.*,*.log} /var/spool{/anacron/*,mail,plymouth/*} /etc/shadow- ; do
+    rm -f $f
+done
+if [ -d /var/lib/puppet ] ; then
+    rm -rf /var/lib/puppet/clientbucket/*
+    find /var/lib/puppet -print0 | xargs -0 rm -rf
+    mkdir /var/lib/puppet
+    rm -rf /etc/puppet/*/*
+fi
+rm -rf /var/tmp/*
+rm -rf /etc/.git
+rm -f /var/lib/dhclient/*
+rm -f /var/lib/dhcp/dhclient.leases
+rm -f /root/{.Xauthority,.bash_history}
+rm -f /var/osc/*
+if [ -f /etc/udev/rules.d/70-persistent-net.rules ] ; then
+  rm /etc/udev/rules.d/70-persistent-net.rules
+  NETDEV=/sys/class/net/eth0
+  if [ -x $(type -p udevadm) ] ; then
+    eval $(udevadm info -q property --path=$NETDEV | sed -r 's/(.*)=(.*)/\1="\2"/')
+    KERNELS=$NET_MATCHID
+  fi
+  if [ -n "$KERNELS" ] ; then
+    cat > /etc/udev/rules.d/70-persistent-net.rules << __EOF__
+ACTION=="add", SUBSYSTEM=="net", SUBSYSTEMS=="pci", KERNELS=="$KERNELS", NAME="eth0"
+__EOF__
+  fi
+fi
+[ -f $0 ] && rm $0
