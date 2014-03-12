@@ -1,0 +1,33 @@
+set -e
+
+DISK=$1
+MPATH=$2
+BLKID=$3
+
+[ -z "$DISK" ] && exit 1
+
+PART=${DISK}1
+
+while [ \! -b $DISK ] ; do sync ; done
+
+echo ',,8e,' | sfdisk $DISK
+while [ \! -b $PART ] ; do blockdev --flushbufs $DISK ; sync ; done
+pvcreate $PART
+
+if [ -n "$MPATH" ]; then
+    DEVICE=$(awk -v path="^$MPATH\$" '$2 ~ path {print $1}' /proc/mounts)
+elif [ -n "$BLKID" ]; then
+    DEVICE=$(blkid -t "$BLKID" -o device)
+else
+    exit 1
+fi
+
+[ -z "$DEVICE" ] && exit 1
+
+eval $(lvs --noheadings  --nameprefixes -o  vg_name,lv_name $DEVICE)
+
+[ -z "$LVM2_VG_NAME" -o -z "$LVM2_LV_NAME" ] && exit 1
+
+vgextend $LVM2_VG_NAME $PART
+lvresize -r -l +100%FREE $LVM2_VG_NAME/$LVM2_LV_NAME $PART
+exit 0
