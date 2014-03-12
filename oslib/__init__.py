@@ -45,6 +45,9 @@ def get_cmd(context, ec2_object, verb):
 # we will use replace instead
 output_locale = locale.getpreferredencoding()
 
+def unicodetoascii(string):
+    return codecs.encode(string, output_locale, 'replace')
+
 def print_run_phrase(context, ec2_object, verb, args=None, **kwargs):
     (cmd, executed) = run_phrase(context, ec2_object, verb, args, **kwargs)
     if cmd == None:
@@ -60,13 +63,13 @@ def print_run_phrase(context, ec2_object, verb, args=None, **kwargs):
                     sys.stdout.flush()
         return cmd.status()
     # An exception was catched, print it
-    elif executed.__class__.__name__ == 'EC2ResponseError' or executed.__class__.__name__ == 'OSLibError':
+    elif isinstance(executed, Exception):
         print "'%s %s' failed with \"%s\"" % (ec2_object.name, verb, executed.error_message)
     # Else if it return something, just print it
     elif executed != None and executed:
         string = cmd.to_str(executed)
         if string:
-            print codecs.encode(string, output_locale, 'replace'),
+            print unicodetoascii(string),
         return cmd.status()
     #It return false, something went wrong
     elif executed != None:
