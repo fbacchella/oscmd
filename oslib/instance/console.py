@@ -1,4 +1,5 @@
 import boto
+import codecs
 from oslib.command import Command
 import time
 import zlib
@@ -62,4 +63,4 @@ This class is used to display the console of an existing instance"""
             last_timestamp = console_output.timestamp
 
     def to_str(self, line):
-        return line + "\n"
+        return codecs.decode(line, 'ascii', 'replace') + "\n"
