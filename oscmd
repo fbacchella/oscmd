@@ -13,12 +13,47 @@ import oslib
 from oslib.ec2_objects import ec2_objects
 import optparse
 from oslib.context import Context
+import codecs
+import locale
+
+# needed because default unicode to ascii encoding is strict
+# we will use replace instead
+
+def unicodetoascii(string):
+    return codecs.encode(string, output_locale, 'replace')
+
+output_locale = locale.getpreferredencoding()
+
+def print_run_phrase(context, ec2_object, verb, args=None, **kwargs):
+    (cmd, executed) = oslib.run_phrase(context, ec2_object, verb, args, **kwargs)
+    if cmd == None:
+        print "invalid phrase '%s %s'" % (ec2_object.name, verb)
+        return 255
+    # If execute return a generator, iterate other it
+    if executed.__class__.__name__ == 'generator':
+        for s in executed:
+            if s != None:
+                string = cmd.to_str(s)
+                if string:
+                    print unicodetoascii(string),
+                    sys.stdout.flush()
+        return cmd.status()
+    # Else if it return something, just print it
+    elif executed != None and executed:
+        string = cmd.to_str(executed)
+        if string:
+            print unicodetoascii(string),
+        return cmd.status()
+    #It return false, something went wrong
+    elif executed != None:
+        print "'%s %s' failed" % (ec2_object.name, verb)
+    return 255
 
 default_config = None
 if 'OSCONFIG' in os.environ:
     default_config = os.environ['OSCONFIG']
 
-usage_common = "usage: %%prog [options] object [object_args] verb [verbs_args]"
+usage_common = "usage: %prog [options] object [object_args] verb [verbs_args]"
 #The first level parser
 parser = optparse.OptionParser(usage="%s\nobjects are:\n    %s" % (usage_common, "\n    ".join(oslib.objects.keys())))
 parser.disable_interspersed_args()
@@ -84,8 +119,11 @@ if len(args) > 0:
             ec2_object = ec2_object_type(context, **vars(object_options))
         else:
             ec2_object = None
-        status = oslib.print_run_phrase(context, ec2_object, verb, object_args)
-        sys.exit(status)
+        try:
+            status = print_run_phrase(context, ec2_object, verb, object_args)
+            sys.exit(status)
+        except (boto.exception.EC2ResponseError, oslib.OSLibError) as e:
+            print "The action \"%s %s\" failed with \"%s\"" % (ec2_object.name, verb, e.error_message)
     else:
         print 'verb missing'
 else:
