@@ -58,8 +58,8 @@ class Authorize(Command):
     def to_str(self, status):
         if status.__class__ == "".__class__:
             return status + "\n"
-        else:
-            return status
+        elif not status:
+            return status + "\n"
 
 class DeAuthorize(Command):
     object = 'securitygroup'
