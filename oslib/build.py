@@ -15,6 +15,8 @@ import oslib.ec2_objects
 import yaml
 import oslib.resources
 
+from oslib.instance.windows import GetWindowsPassword
+
 def parse_facts(option, opt_str, value, parser, *args, **kwargs):
     (key,value) = value
     local_facts = parser.values.local_facts
@@ -204,9 +206,6 @@ def do_build(ctxt, **kwargs):
 
     do_run_scripts =  kwargs.pop('run')
 
-    windows_instance =  kwargs.pop('windows')
-
-
     ###########
     # Check VM naming
     ###########
@@ -317,7 +316,7 @@ def do_build(ctxt, **kwargs):
         conn.create_tags([ device_type.volume_id ], vol_tags)
     instance.update(True)
 
-    windows_instance = instance.platform.system() == 'Windows'
+    windows_instance = instance.platform == 'Windows'
 
     if do_run_scripts and not windows_instance:
         while instance.state != 'terminated':
@@ -335,10 +334,20 @@ def do_build(ctxt, **kwargs):
         instance.key_file = key_file
 
         remote_setup(instance, remote_user, key_file)
-
-    if windows_instance:
-        windows_password = conn.get_password_data(instance.id)
-        Windows_password_cleartext = oslib.decrypt_windows_passwd.decryptPassword()
+    elif windows_instance:
+        os_instance = oslib.ec2_objects.Instance(ctxt, id=instance.id)
+        passget = GetWindowsPassword()
+        passget.set_context(ctxt)
+        passget.ec2_object = os_instance
+        passget.validate(None)
+        try_again = True
+        while try_again:
+            try:
+                password = "\npassword is '%s'\n" % passget.execute(key_file=key_file)
+                yield password
+                try_again = False
+            except OSLibError:
+                yield (".")
+                time.sleep(1)
 
     yield instance
-    

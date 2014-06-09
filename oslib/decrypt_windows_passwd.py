@@ -60,11 +60,12 @@ def decryptPassword(rsaKey, password):
 
 def import_rsa_key(keyfile_name, passphrase):
     #Open your keyfile
-    keyFile = keyfile_name
+    keyFile = open(keyfile_name)
     #Read file
     keyLines = keyFile.readlines()
     #Import it
     key = RSA.importKey(keyLines, passphrase=passphrase)
+    return key
 
 if __name__ == "__main__":
     parser = optparse.OptionParser()
