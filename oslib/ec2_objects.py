@@ -43,8 +43,9 @@ class EC2Object(object):
             self.tags = self.ec2_object.tags
             if 'Name' in self.tags:
                 self.tag_name = self.tags['Name']
-        self.id = self.ec2_object.__getattribute__(self.__class__.id_attr_name)
-        
+
+        self.id = getattr(self.ec2_object, self.__class__.id_attr_name)
+
     def get(self):
         if self.ec2_object:
             return self.ec2_object
@@ -241,10 +242,11 @@ class KeyPair(EC2Object):
     name = 'keypair'
     get_all_func = EC2Connection.get_all_key_pairs
     get_all_ids = 'keynames'
+    id_attr_name = 'name'
 
     #the name is not a tag for key pairs
     def get_by_name(self, name):
-        return EC2Connection.get_key_pair(name)
+        return self.ctxt.cnx_ec2.get_key_pair(name)
 
     #key pairs don't have ids, only names
     def get_by_id(self, id):
