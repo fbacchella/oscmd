@@ -58,12 +58,12 @@ def build_user_data(user_data_properties, **kwargs):
         user_data.append(user_data_properties)
 
     hostname = kwargs.pop('hostname')
-    if hostname != None:
+    if hostname is not None:
         user_data.append("#!/bin/bash\nhostname %s && uname -a" % hostname)
 
     #Check for local facts
     local_facts = kwargs.pop('local_facts', None)
-    if local_facts != None and len(local_facts) > 0:
+    if local_facts is not None and len(local_facts) > 0:
         user_data_string = "---\n"
         for k,v in local_facts.iteritems():
             user_data_string += "%s: %s\n" % (k, ",".join(v))
@@ -78,14 +78,14 @@ def build_user_data(user_data_properties, **kwargs):
     search_path.extend(kwargs.pop('ressources_dir'))
     for r in kwargs.pop('ressource'):
         done = False
-        # look for the ressource in the ressources search path
+        # look for the resource in the resources search path
         for path in search_path:
-            ressource_path = os.path.join(path, r)
-            if os.path.exists(ressource_path):
-                user_data.append(content_file_path=ressource_path)
+            resource_path = os.path.join(path, r)
+            if os.path.exists(resource_path):
+                user_data.append(content_file_path=resource_path)
                 done = True
         if not done:
-            raise OSLibError("ressource not found: %s" % r)
+            raise OSLibError("resource not found: %s" % r)
 
     kwargs['user_data'] = "%s" % user_data
     return kwargs
@@ -119,7 +119,7 @@ def do_tags(**kwargs):
             tags[key] = kwargs.pop(arg)
 
     name = kwargs.pop('name', None)
-    if name != None:
+    if name is not None:
         tags['Name'] = name
     
     if not 'creator' in tags:
@@ -188,8 +188,8 @@ def do_build(ctxt, **kwargs):
     conn = ctxt.cnx_ec2
     if 'template' in kwargs and kwargs['template']:
         template_file_name = kwargs['template']
-        del kwargs['template']
         kwargs = parse_template(ctxt, template_file_name, kwargs)
+    del kwargs['template']
 
     defaultrun = {'instance_type': 'm1.large', 'key_name': ctxt.key_name }
     for key in defaultrun:

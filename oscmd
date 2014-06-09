@@ -4,6 +4,7 @@ import os
 import sys
 # add boto module in PYTHONPATH if available
 import os.path as osp
+
 __botolibpath = osp.join(osp.dirname(__file__), '..', 'boto-2.14.0')
 if osp.isdir(__botolibpath):
     sys.path.append(__botolibpath)
@@ -22,11 +23,14 @@ import locale
 def unicodetoascii(string):
     return codecs.encode(string, output_locale, 'replace')
 
+
 output_locale = locale.getpreferredencoding()
+if len(output_locale) == 0:
+    output_locale = "US-ASCII"
 
 def print_run_phrase(context, ec2_object, verb, args=None, **kwargs):
     (cmd, executed) = oslib.run_phrase(context, ec2_object, verb, args, **kwargs)
-    if cmd == None:
+    if cmd is None:
         print "invalid phrase '%s %s'" % (ec2_object.name, verb)
         return 255
     # If execute return a generator, iterate other it
@@ -48,6 +52,7 @@ def print_run_phrase(context, ec2_object, verb, args=None, **kwargs):
     elif executed != None:
         print "'%s %s' failed" % (ec2_object.name, verb)
     return 255
+
 
 default_config = None
 if 'OSCONFIG' in os.environ:
