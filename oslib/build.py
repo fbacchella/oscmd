@@ -43,6 +43,7 @@ def file_parser(parser):
     parser.add_option("-e", "--elastic_ip", dest="elastic_ip", help="create and associate an EIP for this vm", default=None, action="store_true")
     parser.add_option("-I", "--private_ip", dest="private_ip_address", help="set this IP, if instance is in a VPC", default=None)
     parser.add_option("-P", "--profile", dest="instance_profile_arn", help="The arn of the IAM Instance Profile (IIP) to associate with the instances.", default=None)
+    parser.add_option("-N", "--notrun", dest="run", help="Don't run the post install command", default=True, action="store_false")
     parser.add_option("", "--subnet-id", dest="subnet_id", help="", default=None)
 
 def build_user_data(user_data_properties, **kwargs):
@@ -201,10 +202,15 @@ def do_build(ctxt, **kwargs):
 
     (tags,kwargs) = do_tags(**kwargs)
 
+    do_run_scripts =  kwargs.pop('run')
+
+    windows_instance =  kwargs.pop('windows')
+
+
     ###########
     # Check VM naming
     ###########
-    if 'Name' not in tags and kwargs['hostname'] != None:
+    if 'Name' not in tags and kwargs['hostname'] is not None:
         tags['Name'] = kwargs['hostname']
     if 'Name' not in tags:
         yield "instance name is mandatory"
@@ -238,7 +244,7 @@ def do_build(ctxt, **kwargs):
         kwargs['block_device_map'] = volumes
         user_data_properties['volumes'] = ' '.join(volumes.keys())
 
-    # after user_data_properties['volumes']  otherwise they will be lvm'ed
+    # after user_data_properties['volumes'] otherwise they will be lvm'ed
     for snapshot_id in kwargs.pop('snap_id', []):
         volumes["/dev/sd%s"%l] = BlockDeviceType(connection=conn, snapshot_id=snapshot_id)
         l = chr( ord(l[0]) + 1)
@@ -311,20 +317,28 @@ def do_build(ctxt, **kwargs):
         conn.create_tags([ device_type.volume_id ], vol_tags)
     instance.update(True)
 
-    while instance.state != 'terminated':
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(1.0)
-            s.connect((instance.public_dns_name, 22))
-            s.close()
-            break
-        except socket.error, msg:
-            yield (".")
-            s.close()
-            time.sleep(1)
-    yield ("\n")
-    instance.key_file = key_file
-    
-    remote_setup(instance, remote_user, key_file)
+    windows_instance = instance.platform.system() == 'Windows'
+
+    if do_run_scripts and not windows_instance:
+        while instance.state != 'terminated':
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.settimeout(1.0)
+                s.connect((instance.public_dns_name, 22))
+                s.close()
+                break
+            except socket.error, msg:
+                yield (".")
+                s.close()
+                time.sleep(1)
+        yield ("\n")
+        instance.key_file = key_file
+
+        remote_setup(instance, remote_user, key_file)
+
+    if windows_instance:
+        windows_password = conn.get_password_data(instance.id)
+        Windows_password_cleartext = oslib.decrypt_windows_passwd.decryptPassword()
 
     yield instance
+    
