@@ -10,7 +10,7 @@ class Save(Command):
         parser.add_option("-o", "--output-directory", dest="output", help="output directory", default="~/.ssh/")
 
     def execute(self, *args, **kwargs):
-        keypair = self.conn.get_key_pair(kwargs['name'])
+        keypair = self.ctxt.cnx_ec2.get_key_pair(kwargs['name'])
         keypair.save(kwargs['output'])
 
     def validate(self, options):
@@ -26,7 +26,7 @@ class Create(Command):
         parser.add_option("-o", "--output-directory", dest="output", help="output directory", default="~/.ssh/")
         
     def execute(self, *args, **kwargs):
-        keypair = self.conn.create_key_pair(kwargs['name'])
+        keypair = self.ctxt.cnx_ec2.create_key_pair(kwargs['name'])
         keypair.save(kwargs['output'])
 
     def validate(self, options):
