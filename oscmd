@@ -88,16 +88,16 @@ except boto.exception.EC2ResponseError as e:
         print "connection failed, bad security token"
         exit(254)
     else:
-        raise e 
-    
+        raise e
+
 if options.listzone:
     for z in context.conn.get_all_zones():
-        print "%s:%s" %(z.region.name,z.name)
+        print "%s:%s" % (z.region.name, z.name)
     exit(0)
 
 if len(args) > 0:
     #A object is found try to resolve the verb
-    
+
     ec2_object_name = args.pop(0)
     if ec2_object_name in ec2_objects:
         ec2_object_type = ec2_objects[ec2_object_name]
@@ -117,7 +117,7 @@ if len(args) > 0:
     if ec2_object_type and 'set_parser' in ec2_object_type.__dict__:
         ec2_object_type.set_parser(parser_object)
     (object_options, object_args) = parser_object.parse_args(args)
-    
+
     if len(object_args) > 0:
         verb = object_args.pop(0)
         if ec2_object_type:

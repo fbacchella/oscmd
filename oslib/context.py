@@ -82,8 +82,7 @@ class Context(object):
         self.key_name = self.config.get('Credentials','key_name')
         self.key_file = self.config.get('Credentials','key_file')
         self.user = self.config.get('Credentials','user', 'root')
-        self.user = self.config.get('Credentials','user', 'root')
-        
+
         if 'zone_name' in kwargs:
             self.zone = self.conn.get_all_zones(zones=[kwargs['zone_name']])[0]
             del kwargs['zone_name']
