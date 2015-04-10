@@ -1,4 +1,5 @@
 import sys
+import re
 
 all_libs = (
     'ami',
@@ -49,7 +50,25 @@ def run_phrase(context, ec2_object, verb, args=None, **kwargs):
             return (cmd, cmd.execute(verb_args, **verb_options))
     # Nothing done, return nothing
     return (None, None)
-    
+
+units = {
+    'T': 1099511627776,
+    'G': 1073741824,
+    'M': 1048576,
+    'K': 1024,
+    'k': 1024,
+    '': 1,
+}
+size_re = re.compile('(\\d+)([TGMKk]?)');
+
+def parse_size(input_size, out_suffix=""):
+    matcher = size_re.match("%s" % input_size)
+    if matcher is not None:
+        value = float(matcher.group(1))
+        suffix = matcher.group(2)
+        return value * units[suffix] / units[out_suffix]
+
+
 for lib in all_libs:
     cmd_module = __import__(lib, globals(), locals(), [], -1)
     for class_ref in cmd_module.class_ref:

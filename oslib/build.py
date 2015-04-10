@@ -27,7 +27,7 @@ def parse_facts(option, opt_str, value, parser, *args, **kwargs):
 
 def file_parser(parser):
     parser.add_option("-n", "--name", dest="name", help="Instance name", default=None)
-    parser.add_option("-s", "--volume_size", dest="volume_size", help="new volume size (GB)", default=[], action='append', type="int")
+    parser.add_option("-s", "--volume_size", dest="volume_size", help="new volume size (GB)", default=[], action='append', type="string")
     parser.add_option("-i", "--snap_id", dest="snap_id", help="some snashop to generate volume from", default=[], action='append')
     parser.add_option("-U", "--url", dest="url_commands", help="URL to os-init command", default=[], action='append')
     parser.add_option("-t", "--instance-type", dest="instance_type", help="Specifies the type of instance to be launched.", default=None)
@@ -233,10 +233,34 @@ def do_build(ctxt, **kwargs):
     volumes = BlockDeviceMapping(conn)
     first_volume = 'f'
     l = first_volume
-    
+
+    ebs_optimized = False
     for volume_info in kwargs.pop('volume_size', []):
-        volumes["/dev/sd%s"%l] = BlockDeviceType(connection=conn, size=volume_info)
+        options = volume_info.split(',')
+        size = oslib.parse_size(options[0], 'G')
+        # not even one gigabyte, suffix must have been forgotten
+        if size < 1:
+            size = size * 1024 * 1024 * 1024
+        size = int(size)
+        vol_kwargs = {"connection":conn, "size": size}
+        if len(options) > 1:
+            for opt in options[1:]:
+                parsed = opt.split('=')
+                key = parsed[0]
+                if len(parsed) == 2:
+                    value = parsed[1]
+                elif len(parsed) == 1:
+                    value = True
+                else:
+                    raise OSLibError("can't parse volume argument %s", opt)
+                if key == 'iops':
+                    ebs_optimized = True
+                    vol_kwargs['volume_type'] = 'io1'
+                vol_kwargs[key] = value
+        print vol_kwargs
+        volumes["/dev/sd%s"%l] = BlockDeviceType(**vol_kwargs)
         l = chr( ord(l[0]) + 1)
+    kwargs['ebs_optimized'] = ebs_optimized
 
     # if drive letter is not f, some volumes definition was found
     if l != first_volume:
