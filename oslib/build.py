@@ -257,7 +257,6 @@ def do_build(ctxt, **kwargs):
                     ebs_optimized = True
                     vol_kwargs['volume_type'] = 'io1'
                 vol_kwargs[key] = value
-        print vol_kwargs
         volumes["/dev/sd%s"%l] = BlockDeviceType(**vol_kwargs)
         l = chr( ord(l[0]) + 1)
     kwargs['ebs_optimized'] = ebs_optimized
