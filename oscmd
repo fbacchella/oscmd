@@ -53,84 +53,91 @@ def print_run_phrase(context, ec2_object, verb, args=None, **kwargs):
         print "'%s %s' failed" % (ec2_object.name, verb)
     return 255
 
+def main():
+    default_config = None
+    if 'OSCONFIG' in os.environ:
+        default_config = os.environ['OSCONFIG']
 
-default_config = None
-if 'OSCONFIG' in os.environ:
-    default_config = os.environ['OSCONFIG']
+    usage_common = "usage: %prog [options] object [object_args] verb [verbs_args]"
+    #The first level parser
+    parser = optparse.OptionParser(usage="%s\nobjects are:\n    %s" % (usage_common, "\n    ".join(oslib.objects.keys())))
+    parser.disable_interspersed_args()
+    parser.add_option("-c", "--config", dest="config_file", help="an alternative config file", default=default_config)
+    parser.add_option("-z", "--zone", dest="zone_name", help="zone name", default=None)
+    parser.add_option("-e", "--endpoint", dest="endpoint", help="endpoint URL", default=None)
+    parser.add_option("-L", "--listzone", dest="listzone", help="endpoint URL", default=False, action='store_true')
+    parser.add_option("-S", "--securitycredentials", dest="security_credentials", help="extract token from security credential", default=False)
+    parser.add_option("-d", "--debuglevel", dest="debug", help="The debug level", default=None, type="int")
 
-usage_common = "usage: %prog [options] object [object_args] verb [verbs_args]"
-#The first level parser
-parser = optparse.OptionParser(usage="%s\nobjects are:\n    %s" % (usage_common, "\n    ".join(oslib.objects.keys())))
-parser.disable_interspersed_args()
-parser.add_option("-c", "--config", dest="config_file", help="an alternative config file", default=default_config)
-parser.add_option("-z", "--zone", dest="zone_name", help="zone name", default=None)
-parser.add_option("-e", "--endpoint", dest="endpoint", help="endpoint URL", default=None)
-parser.add_option("-L", "--listzone", dest="listzone", help="endpoint URL", default=False, action='store_true')
-parser.add_option("-S", "--securitycredentials", dest="security_credentials", help="extract token from security credential", default=False)
-parser.add_option("-d", "--debuglevel", dest="debug", help="The debug level", default=None, type="int")
+    (options, args) = parser.parse_args()
 
-(options, args) = parser.parse_args()
-
-#Extract the context from the first level arguments
-try:
-    kwargs = {}
-    for option_name in ('config_file', 'zone_name', 'endpoint', 'security_credentials', 'debug'):
-        value = getattr(options, option_name, None)
-        if value:
-            kwargs[option_name] = value
-    context = Context(**kwargs)
-except boto.exception.NoAuthHandlerFound:
-    print """AWS authentication failed, did you setup $HOME/.boto ?"""
-    print "A sample can be found at %s/dotboto.sample" % os.path.dirname(os.path.abspath(oslib.__file__))
-    exit(1)
-except boto.exception.EC2ResponseError as e:
-    if e.error_code == 'AuthFailure':
-        print "connection failed, bad security token"
-        exit(254)
-    else:
-        raise e
-
-if options.listzone:
-    for z in context.conn.get_all_zones():
-        print "%s:%s" % (z.region.name, z.name)
-    exit(0)
-
-if len(args) > 0:
-    #A object is found try to resolve the verb
-
-    ec2_object_name = args.pop(0)
-    if ec2_object_name in ec2_objects:
-        ec2_object_type = ec2_objects[ec2_object_name]
-    else:
-        ec2_object_type = None
-
-    if not ec2_object_name in oslib.objects:
-        print 'unknonw object: %s' % ec2_object_name
-        sys.exit(253)
-    #The object parser
-    parser_object = optparse.OptionParser()
-    parser_object.disable_interspersed_args()
-    parser_object.add_option("-i", "--id", dest="id", help="object ID", default=None)
-    parser_object.add_option("-n", "--name", dest="name", help="object tag 'Name'", default=None)
-    parser_object.set_usage("%s\nverbs are:\n    %s" % (usage_common, "\n    ".join(oslib.objects[ec2_object_name].keys())))
-
-    if ec2_object_type and 'set_parser' in ec2_object_type.__dict__:
-        ec2_object_type.set_parser(parser_object)
-    (object_options, object_args) = parser_object.parse_args(args)
-
-    if len(object_args) > 0:
-        verb = object_args.pop(0)
-        if ec2_object_type:
-            ec2_object = ec2_object_type(context, **vars(object_options))
+    #Extract the context from the first level arguments
+    try:
+        kwargs = {}
+        for option_name in ('config_file', 'zone_name', 'endpoint', 'security_credentials', 'debug'):
+            value = getattr(options, option_name, None)
+            if value:
+                kwargs[option_name] = value
+        context = Context(**kwargs)
+    except boto.exception.NoAuthHandlerFound:
+        print """AWS authentication failed, did you setup $HOME/.boto ?"""
+        print "A sample can be found at %s/dotboto.sample" % os.path.dirname(os.path.abspath(oslib.__file__))
+        return 1
+    except boto.exception.EC2ResponseError as e:
+        if e.error_code == 'AuthFailure':
+            print "connection failed, bad security token"
+            return 254
         else:
-            ec2_object = None
-        try:
-            status = print_run_phrase(context, ec2_object, verb, object_args)
-            sys.exit(status)
-        except (boto.exception.EC2ResponseError, oslib.OSLibError) as e:
-            print "The action \"%s %s\" failed with \"%s\"" % (ec2_object.name, verb, e.error_message)
+            raise e
+
+    if options.listzone:
+        for z in context.conn.get_all_zones():
+            print "%s:%s" % (z.region.name, z.name)
+        return 0
+
+    if len(args) > 0:
+        #A object is found try to resolve the verb
+
+        ec2_object_name = args.pop(0)
+        if ec2_object_name in ec2_objects:
+            ec2_object_type = ec2_objects[ec2_object_name]
+        else:
+            ec2_object_type = None
+
+        if not ec2_object_name in oslib.objects:
+            print 'unknonw object: %s' % ec2_object_name
+            return 253
+        #The object parser
+        parser_object = optparse.OptionParser()
+        parser_object.disable_interspersed_args()
+        parser_object.add_option("-i", "--id", dest="id", help="object ID", default=None)
+        parser_object.add_option("-n", "--name", dest="name", help="object tag 'Name'", default=None)
+        parser_object.set_usage("%s\nverbs are:\n    %s" % (usage_common, "\n    ".join(oslib.objects[ec2_object_name].keys())))
+
+        if ec2_object_type and 'set_parser' in ec2_object_type.__dict__:
+            ec2_object_type.set_parser(parser_object)
+        (object_options, object_args) = parser_object.parse_args(args)
+
+        if len(object_args) > 0:
+            verb = object_args.pop(0)
+            if ec2_object_type:
+                ec2_object = ec2_object_type(context, **vars(object_options))
+            else:
+                ec2_object = None
+            try:
+                status = print_run_phrase(context, ec2_object, verb, object_args)
+                sys.exit(status)
+            except (boto.exception.EC2ResponseError, oslib.OSLibError) as e:
+                print "The action \"%s %s\" failed with \"%s\"" % (ec2_object.name, verb, e.error_message)
+        else:
+            print 'verb missing'
     else:
-        print 'verb missing'
-else:
-    print 'object missing'
-sys.exit(253)
+        print 'object missing'
+    return 253
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        sys.exit(1)
