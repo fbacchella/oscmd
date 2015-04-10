@@ -236,12 +236,13 @@ def do_build(ctxt, **kwargs):
 
     ebs_optimized = False
     for volume_info in kwargs.pop('volume_size', []):
-        options = volume_info.split(',')
-        size = oslib.parse_size(options[0], 'G')
-        # not even one gigabyte, suffix must have been forgotten
-        if size < 1:
-            size = size * 1024 * 1024 * 1024
-        size = int(size)
+        # yaml is not typed, volume_info can be a string or a number
+        if isinstance(volume_info, basestring):
+            options = volume_info.split(',')
+            size = int(oslib.parse_size(options[0], 'G', default_suffix='G'))
+        else:
+            options = []
+            size = int(volume_info)
         vol_kwargs = {"connection":conn, "size": size}
         if len(options) > 1:
             for opt in options[1:]:

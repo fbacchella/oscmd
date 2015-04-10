@@ -61,11 +61,13 @@ units = {
 }
 size_re = re.compile('(\\d+)([TGMKk]?)');
 
-def parse_size(input_size, out_suffix=""):
+def parse_size(input_size, out_suffix="", default_suffix=None):
     matcher = size_re.match("%s" % input_size)
     if matcher is not None:
         value = float(matcher.group(1))
         suffix = matcher.group(2)
+        if suffix == '' and default_suffix is not None:
+            suffix = default_suffix
         return value * units[suffix] / units[out_suffix]
 
 
