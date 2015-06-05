@@ -77,7 +77,7 @@ class Command:
 starts_with_mappings = {
     '#include' : 'text/x-include-url',
     '#include-once' : 'text/x-include-once-url',
-    '#!' : 'text/x-shellscript',
+    '#!' : 'text/x-executable',
     '#cloud-config' : 'text/cloud-config',
     '#upstart-job'  : 'text/upstart-job',
     '#part-handler' : 'text/part-handler',
@@ -128,7 +128,7 @@ class MimeManipulation(Command):
         :rtype: str:
         """
         wrapper = MIMEMultipart()
-        for name,con,definite_type,content_encondig in content:
+        for name, con, definite_type, content_encondig in content:
             if definite_type == None:
                 definite_type = guess_mime_type(con, deftype)
             maintype, subtype = definite_type.split('/', 1)
@@ -144,7 +144,8 @@ class MimeManipulation(Command):
                 Encoders.encode_base64(mime_con)
             if content_encondig != None:
                 mime_con.add_header('Content-Encoding', content_encondig)
-            mime_con.add_header('Content-Disposition', 'attachment', filename=name)
+            if name is not None:
+                mime_con.add_header('Content-Disposition', 'attachment', filename=name)
             wrapper.attach(mime_con)
         rcontent = wrapper.as_string()
 
@@ -246,10 +247,10 @@ class MimeDecode(MimeManipulation):
         return
     
     def extract_file(self, msg, file_name = None, overwrite=None, autoname=False):
-        if file_name == None:
+        if file_name is None:
             file_name = msg.get_filename()
             
-        if file_name == None:
+        if file_name is None:
             if autoname:
                 (fd, file_name) = tempfile.mkstemp(dir=".")
                 os.close(fd)
@@ -291,10 +292,23 @@ class MimeDecode(MimeManipulation):
     
     def run_command(self, msg):
         cmd_file = self.extract_file(msg, autoname=True)
-        if cmd_file != None:
+        print cmd_file
+        if cmd_file is not None:
             os.chmod(cmd_file, stat.S_IXUSR| stat.S_IRUSR)
             try:
                 subprocess.call([cmd_file], stdout=sys.stdout)
+                os.unlink(cmd_file)
+            except Exception as e:
+                print "execution of %s failed with %s" %(cmd_file, e)
+
+    def run_shell_command(self, msg):
+        cmd_file = self.extract_file(msg, autoname=True)
+        print cmd_file
+        if cmd_file is not None:
+            os.chmod(cmd_file, stat.S_IXUSR| stat.S_IRUSR)
+            try:
+                subprocess.call(["/bin/sh", cmd_file], stdout=sys.stdout)
+                os.unlink(cmd_file)
             except Exception as e:
                 print "execution of %s failed with %s" %(cmd_file, e)
 
@@ -331,45 +345,95 @@ class MimeDecode(MimeManipulation):
                 continue
             os.environ[key] = value
 
+    def install_packages(self, msg):
+        packages_cmd = ["/usr/bin/yum", "-y", "install"]
+        for l in msg.get_payload().splitlines(False):
+            packages_cmd.append(l.strip())
+        try:
+            subprocess.call(packages_cmd, stdout=sys.stdout)
+        except Exception as e:
+            print "installation of packages failed with: %s" % (e)
+
 MimeDecode.mime_action = {
     'text/x-include-url': MimeDecode.walk_include,
-    'text/x-shellscript': MimeDecode.run_command,
+    'text/x-shellscript': MimeDecode.run_shell_command,
+    'text/x-executable': MimeDecode.run_command,
     'text/x-python': MimeDecode.run_command,
     'application/facter-yaml': MimeDecode.facter_fact,
     'text/properties':  MimeDecode.set_properties,
     'text/plain': MimeDecode.extract_file,
-    'application/x-rpm': MimeDecode.install_rpm
+    'application/x-rpm': MimeDecode.install_rpm,
+    'text/x-packagelist': MimeDecode.install_packages,
 }
 
 class MimeEncode(MimeManipulation):
     def __init__(self):
+
         self.__class__.__bases__[0].__init__(self)
         if not 'mimetypes_init' in dir(self.__class__):
             self.__class__.mimetypes_init = mimetypes.init()
 
     def get_parser(self):
         parser = optparse.OptionParser()
-        parser.add_option("-f", "--file", dest="file_list", help="Files to add", default=None, action="append")
+        parser.add_option("-f", "--file", dest="file_list", help="Files to add", default=[], action="append")
         parser.add_option("-p", "--pack", dest="do_pack", help="needs to pack user date", default=False, action="store_true")
+        parser.add_option("-y", "--yaml_content", dest="yaml_content", help="The content as a yaml file", default=None, action="store")
         return parser
 
     def execute(self, args, **kwargs):
         content = [ ]
+        if kwargs['yaml_content'] is not None:
+            import yaml
+            # the yaml file is an array of mime headers
+            with open(kwargs['yaml_content'], "r") as yaml_file:
+                yaml_content = yaml.safe_load(yaml_file)
+            print yaml_content
+            for entry in yaml_content:
+                mimetype = None
+                file_name = None
+                contentencondig = None
+                if 'file_name' in entry:
+                    file_name = entry['file_name']
+                    source = file_name
+                if 'source' in entry:
+                    source = entry['source']
+                    with open(source) as fh:
+                        entry_content = fh.read()
+                if 'content' in entry:
+                    entry_content = entry['content']
+                if 'Content-Type' in entry:
+                    mimetype = entry['Content-Type']
+                if 'Content-Transfer-Encoding' in entry:
+                    contentencondig = entry['Content-Transfer-Encoding']
+                if mimetype is None:
+                    (mimetype, contentencondig) = mimetypes.guess_type(file_name, strict=False)
+
+                content.append((file_name, entry_content, mimetype, contentencondig))
+
         if 'file_list' in kwargs:
             for file_name in kwargs['file_list']:
-                try:
-                    (mimetype, contentencondig) = mimetypes.guess_type(file_name, strict=False)
+                #try:
+                    # Try to split on ;
+                    # the content type is after the ;
+                    mime_guess = file_name.split(";")
+                    if(len(mime_guess)) == 2:
+                        mimetype = mime_guess[1]
+                        contentencondig = None
+                        file_name = mime_guess[0]
+                    else:
+                        (mimetype, contentencondig) = mimetypes.guess_type(file_name, strict=False)
+                    print "%s %s %s" % (file_name, mimetype, contentencondig)
                     with open(file_name) as fh:
                         content.append((file_name, fh.read(), mimetype, contentencondig))
-                except Exception as e:
-                    print "error while parsing file %S: %s" % (file_name, e)
+                #except Exception as e:
+                #    print "error while parsing file %s: %s" % (file_name, e)
                 
         if kwargs['do_pack']:
             print base64.b64encode(self.write_mime_multipart(content, compress=True))
         else:
             print self.write_mime_multipart(content, compress=False)
 
-if __name__ == "__main__":
+def main():
     commands = {
         'encode': MimeEncode(),
         'decode': MimeDecode(),
@@ -388,3 +452,10 @@ if __name__ == "__main__":
         cmd.parse(args)
     else:
         print 'action missing'
+    return 0
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        sys.exit(1)
