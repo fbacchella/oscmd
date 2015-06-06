@@ -6,7 +6,6 @@ import gzip
 import mimetypes
 import optparse
 import os
-import shutil
 import stat
 import subprocess
 import sys
@@ -22,6 +21,7 @@ from email.MIMEMultipart import MIMEMultipart
 from email.MIMEText import MIMEText
 from email.MIMEBase import MIMEBase
 from email.MIMEMultipart import MIMEMultipart
+
 
 def retry_url(url, retry_on_404=True, num_retries=10):
     for i in range(0, num_retries):
@@ -42,9 +42,10 @@ def retry_url(url, retry_on_404=True, num_retries=10):
         time.sleep(2**i)
     return ''
 
+
 def get_instance_userdata(version='latest', sep=None,
-                      url='http://169.254.169.254'):
-    ud_url = '%s/%s/user-data' % (url,version)
+                          url='http://169.254.169.254'):
+    ud_url = '%s/%s/user-data' % (url, version)
     user_data = retry_url(ud_url, retry_on_404=False)
     if user_data:
         if sep:
@@ -64,7 +65,7 @@ class Command:
         raise NameError('get_parser need to be overriden')
     
     def parse(self, args):
-        parser = self.get_parser();
+        parser = self.get_parser()
         (verb_options, verb_args) = parser.parse_args(args)
 
         if len(verb_args) > 0:
@@ -75,31 +76,22 @@ class Command:
         raise NameError('execute need to be overriden')
 
 starts_with_mappings = {
-    '#include' : 'text/x-include-url',
-    '#include-once' : 'text/x-include-once-url',
-    '#!' : 'text/x-executable',
-    '#cloud-config' : 'text/cloud-config',
-    '#upstart-job'  : 'text/upstart-job',
-    '#part-handler' : 'text/part-handler',
-    '#cloud-boothook' : 'text/cloud-boothook',
-    '#cloud-config-archive' : 'text/cloud-config-archive',
+    '#include': 'text/x-include-url',
+    '#include-once': 'text/x-include-once-url',
+    '#!': 'text/x-executable',
+    '#cloud-config': 'text/cloud-config',
+    '#upstart-job': 'text/upstart-job',
+    '#part-handler': 'text/part-handler',
+    '#cloud-boothook': 'text/cloud-boothook',
+    '#cloud-config-archive': 'text/cloud-config-archive',
     'Content-Type: multipart/mixed': 'multipart/mixed',
     '---\n': 'text/x-yaml',
 }
 
+
 def guess_mime_type(content, deftype):
-    """Description: Guess the mime type of a block of text
-    :param content: content we're finding the type of
-    :type str:
-
-    :param deftype: Default mime type
-    :type str:
-
-    :rtype: <type>:
-    :return: <description>
-    """
     rtype = deftype
-    for possible_type,mimetype in starts_with_mappings.items():
+    for possible_type, mimetype in starts_with_mappings.items():
         if content.startswith(possible_type):
             rtype = mimetype
             break
@@ -107,61 +99,42 @@ def guess_mime_type(content, deftype):
     return(rtype)
 
 
-class MimeManipulation(Command):
+def write_mime_multipart(content, compress=False, deftype='text/plain'):
+    wrapper = MIMEMultipart()
+    for name, part_content, definite_type, content_encondig in content:
+        if definite_type is None:
+            definite_type = guess_mime_type(part_content, deftype)
+        maintype, subtype = definite_type.split('/', 1)
+        if maintype == 'multipart' or definite_type == 'message/rfc822':
+            mime_con = MIMEBase(maintype, subtype)
+            mime_con.set_payload(part_content)
+        elif maintype == 'text':
+            mime_con = MIMEText(part_content, _subtype=subtype)
+        else:
+            mime_con = MIMEBase(maintype, subtype)
+            mime_con.set_payload(part_content)
+            # Encode the payload using Base64
+            Encoders.encode_base64(mime_con)
+        if content_encondig is not None:
+            mime_con.add_header('Content-Encoding', content_encondig)
+        if name is not None:
+            mime_con.add_header('Content-Disposition', 'attachment', filename=name)
+        wrapper.attach(mime_con)
+    rcontent = wrapper.as_string()
 
-    def write_mime_multipart(self, content, compress=False, deftype='text/plain', delimiter=':'):
-        """Description:
-        :param content: A list of tuples of name-content pairs. This is used
-        instead of a dict to ensure that scripts run in order
-        :type list of tuples:
+    if compress:
+        buf = StringIO.StringIO()
+        gz = gzip.GzipFile(mode='wb', fileobj=buf)
+        try:
+            gz.write(rcontent)
+        finally:
+            gz.close()
+        rcontent = buf.getvalue()
 
-        :param compress: Use gzip to compress the scripts, defaults to no compression
-        :type bool:
+    return rcontent
 
-        :param deftype: The type that should be assumed if nothing else can be figured out
-        :type str:
 
-        :param delimiter: mime delimiter
-        :type str:
-
-        :return: Final mime multipart
-        :rtype: str:
-        """
-        wrapper = MIMEMultipart()
-        for name, con, definite_type, content_encondig in content:
-            if definite_type == None:
-                definite_type = guess_mime_type(con, deftype)
-            maintype, subtype = definite_type.split('/', 1)
-            if maintype == 'multipart' or definite_type == 'message/rfc822' :
-                mime_con = MIMEBase(maintype, subtype)
-                mime_con.set_payload(con)
-            elif maintype == 'text':
-                mime_con = MIMEText(con, _subtype=subtype)
-            else:
-                mime_con = MIMEBase(maintype, subtype)
-                mime_con.set_payload(con)
-                # Encode the payload using Base64
-                Encoders.encode_base64(mime_con)
-            if content_encondig != None:
-                mime_con.add_header('Content-Encoding', content_encondig)
-            if name is not None:
-                mime_con.add_header('Content-Disposition', 'attachment', filename=name)
-            wrapper.attach(mime_con)
-        rcontent = wrapper.as_string()
-
-        if compress:
-            buf = StringIO.StringIO()
-            gz = gzip.GzipFile(mode='wb', fileobj=buf)
-            try:
-                gz.write(rcontent)
-            finally:
-                gz.close()
-            rcontent = buf.getvalue()
-
-        return rcontent
-
-    
-class MimeDecode(MimeManipulation):
+class MimeDecode(Command):
     url_opener = urllib.FancyURLopener()
 
     def get_parser(self):
@@ -177,7 +150,6 @@ class MimeDecode(MimeManipulation):
         temp_dir = tempfile.mkdtemp()
         olddir = os.getcwd()
         os.chdir(temp_dir)
-        message = None
         if 'mime_file' in kwargs:
             self.enumerate(kwargs['mime_file'], self.__class__.get_file)
         if 'mime_url' in kwargs:
@@ -188,16 +160,15 @@ class MimeDecode(MimeManipulation):
         os.chdir(olddir)
     
     def enumerate(self, sources_list, callback):
-        if sources_list != None and len(sources_list) > 0:
+        if sources_list is not None and len(sources_list) > 0:
             for source in sources_list:
                 message = callback(self, source)
-                if message != None:
+                if message is not None:
                     self.walk_message(message)
 
-            
     def get_string(self, content):
         return email.message_from_string(content)
-        
+
     def get_file(self, mime_file):
         if mime_file == '-':
             fh = sys.stdin
@@ -229,7 +200,7 @@ class MimeDecode(MimeManipulation):
                     continue
                 self.walk_message(part)
         else:
-            content_type =  msg.get_content_type()
+            content_type = msg.get_content_type()
             main_type = msg.get_content_maintype()
             if content_type in self.mime_action:
                 self.mime_action[content_type](self, msg)
@@ -243,10 +214,10 @@ class MimeDecode(MimeManipulation):
             l = l.strip()
             if l.find('http://') == 0:
                 message = self.get_url(l)
-            self.walk_message(message)
+                self.walk_message(message)
         return
     
-    def extract_file(self, msg, file_name = None, overwrite=None, autoname=False):
+    def extract_file(self, msg, file_name=None, overwrite=None, autoname=False):
         if file_name is None:
             file_name = msg.get_filename()
             
@@ -254,14 +225,14 @@ class MimeDecode(MimeManipulation):
             if autoname:
                 (fd, file_name) = tempfile.mkstemp(dir=".")
                 os.close(fd)
-                overwrite=True
+                overwrite = True
             else:
                 return None
         
         # if overwrite not given, take it from headers
-        if overwrite == None:
+        if overwrite is None:
             # Convert a string to a boolean, empty string is false, don't care about the case        
-            overwrite = ("%s" % msg.get('X-overwrite'))[0].upper() == 'T'
+            overwrite = (("%s" % msg.get('X-overwrite'))[0].upper() == 'T')
             
         # We don't override file
         if os.path.isfile(file_name) and not overwrite:
@@ -276,12 +247,12 @@ class MimeDecode(MimeManipulation):
             try:
                 import grp
                 import pwd
-                (user,group) = msg.get('X-Owner').split(':')
+                (user, group) = msg.get('X-Owner').split(':')
                 uid = pwd.getpwnam(user).pw_uid
                 gid = grp.getgrnam(group).gr_gid
                 os.chown(file_name, uid, gid)
             except:
-                print "invalid owner: %s for %s" %( msg.get('X-Owner'), file_name)
+                print "invalid owner: %s for %s" % (msg.get('X-Owner'), file_name)
         if 'X-Mode' in msg:
             try:
                 mode = int(msg.get('X-Mode'), 8)
@@ -294,27 +265,27 @@ class MimeDecode(MimeManipulation):
         cmd_file = self.extract_file(msg, autoname=True)
         print cmd_file
         if cmd_file is not None:
-            os.chmod(cmd_file, stat.S_IXUSR| stat.S_IRUSR)
+            os.chmod(cmd_file, stat.S_IXUSR | stat.S_IRUSR)
             try:
                 subprocess.call([cmd_file], stdout=sys.stdout)
                 os.unlink(cmd_file)
             except Exception as e:
-                print "execution of %s failed with %s" %(cmd_file, e)
+                print "execution of %s failed with %s" % (cmd_file, e)
 
     def run_shell_command(self, msg):
         cmd_file = self.extract_file(msg, autoname=True)
         print cmd_file
         if cmd_file is not None:
-            os.chmod(cmd_file, stat.S_IXUSR| stat.S_IRUSR)
+            os.chmod(cmd_file, stat.S_IXUSR | stat.S_IRUSR)
             try:
                 subprocess.call(["/bin/sh", cmd_file], stdout=sys.stdout)
                 os.unlink(cmd_file)
             except Exception as e:
-                print "execution of %s failed with %s" %(cmd_file, e)
+                print "execution of %s failed with %s" % (cmd_file, e)
 
     def install_rpm(self, msg):
         rpm_file = self.extract_file(msg, autoname=True)
-        if rpm_file != None:
+        if rpm_file is not None:
             try:
                 os.rename(rpm_file, "%s.rpm" % rpm_file)
                 subprocess.call(["/usr/bin/yum", "-y", "install", "%s.rpm" % rpm_file], stdout=sys.stdout)
@@ -324,7 +295,7 @@ class MimeDecode(MimeManipulation):
     def facter_fact(self, msg):
         file_name = os.path.basename(msg.get_filename())
         file_name = os.path.splitext(file_name)[0]
-        if file_name == None:
+        if file_name is None:
             return None
         
         if not os.path.isdir('/etc/facter/facts.d'):
@@ -338,7 +309,7 @@ class MimeDecode(MimeManipulation):
         for l in msg.get_payload().splitlines(False):
             unsafe_vars = ['PATH', 'IFS', 'HOME']
             l = l.strip()
-            (key,value) = l.split(':', 1)
+            (key, value) = l.split(':', 1)
             key = key.strip()
             value = value.strip()
             if key in unsafe_vars:
@@ -352,7 +323,8 @@ class MimeDecode(MimeManipulation):
         try:
             subprocess.call(packages_cmd, stdout=sys.stdout)
         except Exception as e:
-            print "installation of packages failed with: %s" % (e)
+            print "installation of packages failed with: %s" % e
+
 
 MimeDecode.mime_action = {
     'text/x-include-url': MimeDecode.walk_include,
@@ -366,12 +338,9 @@ MimeDecode.mime_action = {
     'text/x-packagelist': MimeDecode.install_packages,
 }
 
-class MimeEncode(MimeManipulation):
-    def __init__(self):
 
-        self.__class__.__bases__[0].__init__(self)
-        if not 'mimetypes_init' in dir(self.__class__):
-            self.__class__.mimetypes_init = mimetypes.init()
+class MimeEncode(Command):
+    mimetypes_init = mimetypes.init()
 
     def get_parser(self):
         parser = optparse.OptionParser()
@@ -381,7 +350,7 @@ class MimeEncode(MimeManipulation):
         return parser
 
     def execute(self, args, **kwargs):
-        content = [ ]
+        content = []
         if kwargs['yaml_content'] is not None:
             import yaml
             # the yaml file is an array of mime headers
@@ -392,11 +361,14 @@ class MimeEncode(MimeManipulation):
                 mimetype = None
                 file_name = None
                 contentencondig = None
+                source = None
+                entry_content = None
                 if 'file_name' in entry:
                     file_name = entry['file_name']
                     source = file_name
                 if 'source' in entry:
                     source = entry['source']
+                if source is not None:
                     with open(source) as fh:
                         entry_content = fh.read()
                 if 'content' in entry:
@@ -410,28 +382,28 @@ class MimeEncode(MimeManipulation):
 
                 content.append((file_name, entry_content, mimetype, contentencondig))
 
-        if 'file_list' in kwargs:
-            for file_name in kwargs['file_list']:
-                #try:
-                    # Try to split on ;
-                    # the content type is after the ;
-                    mime_guess = file_name.split(";")
-                    if(len(mime_guess)) == 2:
-                        mimetype = mime_guess[1]
-                        contentencondig = None
-                        file_name = mime_guess[0]
-                    else:
-                        (mimetype, contentencondig) = mimetypes.guess_type(file_name, strict=False)
-                    print "%s %s %s" % (file_name, mimetype, contentencondig)
-                    with open(file_name) as fh:
-                        content.append((file_name, fh.read(), mimetype, contentencondig))
-                #except Exception as e:
-                #    print "error while parsing file %s: %s" % (file_name, e)
+        for file_name in kwargs['file_list']:
+            #try:
+                # Try to split on ;
+                # the content type is after the ;
+                mime_guess = file_name.split(";")
+                if(len(mime_guess)) == 2:
+                    mimetype = mime_guess[1]
+                    contentencondig = None
+                    file_name = mime_guess[0]
+                else:
+                    (mimetype, contentencondig) = mimetypes.guess_type(file_name, strict=False)
+                print "%s %s %s" % (file_name, mimetype, contentencondig)
+                with open(file_name) as fh:
+                    content.append((file_name, fh.read(), mimetype, contentencondig))
+            #except Exception as e:
+            #    print "error while parsing file %s: %s" % (file_name, e)
                 
         if kwargs['do_pack']:
-            print base64.b64encode(self.write_mime_multipart(content, compress=True))
+            print base64.b64encode(write_mime_multipart(content, compress=True))
         else:
-            print self.write_mime_multipart(content, compress=False)
+            print write_mime_multipart(content, compress=False)
+
 
 def main():
     commands = {
