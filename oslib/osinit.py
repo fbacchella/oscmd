@@ -57,24 +57,6 @@ def get_instance_userdata(version='latest', sep=None,
     return user_data
 
 
-class Command:
-    def __init__(self):
-        pass
-
-    def get_parser(self):
-        raise NameError('get_parser need to be overriden')
-    
-    def parse(self, args):
-        parser = self.get_parser()
-        (verb_options, verb_args) = parser.parse_args(args)
-
-        if len(verb_args) > 0:
-            print "unused arguments: %s" % verb_args
-        self.execute(verb_args, **vars(verb_options))
-
-    def execute(self, args, **kwargs):
-        raise NameError('execute need to be overriden')
-
 starts_with_mappings = {
     '#include': 'text/x-include-url',
     '#include-once': 'text/x-include-once-url',
@@ -108,7 +90,7 @@ def write_mime_multipart(content, compress=False, deftype='text/plain'):
         if maintype == 'multipart' or definite_type == 'message/rfc822':
             mime_con = MIMEBase(maintype, subtype)
             mime_con.set_payload(part_content)
-        elif maintype == 'text':
+        elif maintype == 'text' and content_encondig is None:
             mime_con = MIMEText(part_content, _subtype=subtype)
         else:
             mime_con = MIMEBase(maintype, subtype)
@@ -134,6 +116,25 @@ def write_mime_multipart(content, compress=False, deftype='text/plain'):
     return rcontent
 
 
+class Command:
+    def __init__(self):
+        pass
+
+    def get_parser(self):
+        raise NameError('get_parser need to be overriden')
+    
+    def parse(self, args):
+        parser = self.get_parser()
+        (verb_options, verb_args) = parser.parse_args(args)
+
+        if len(verb_args) > 0:
+            print "unused arguments: %s" % verb_args
+        self.execute(verb_args, **vars(verb_options))
+
+    def execute(self, args, **kwargs):
+        raise NameError('execute need to be overriden')
+
+
 class MimeDecode(Command):
     url_opener = urllib.FancyURLopener()
 
@@ -142,19 +143,17 @@ class MimeDecode(Command):
         parser.add_option("-f", "--file", dest="mime_file", help="MIME multipart file", default=None, action="append")
         parser.add_option("-u", "--URL", dest="mime_url", help="MIME multipart URL", default=None, action="append")
         parser.add_option("-p", "--packed", dest="do_unpack", help="needs to unpack user date", default=False, action="store_true")
-        parser.add_option("-n", "--no-user-date", dest="get_user_date", help="Don't retreive user data", default=True, action="store_false")
+        parser.add_option("-n", "--no-user-date", dest="get_user_date", help="Don't retrieve user data", default=True, action="store_false")
 
         return parser
     
-    def execute(self, args, **kwargs):
+    def execute(self, args, mime_file=None, mime_url=None, get_user_date=True, **kwargs):
         temp_dir = tempfile.mkdtemp()
         olddir = os.getcwd()
         os.chdir(temp_dir)
-        if 'mime_file' in kwargs:
-            self.enumerate(kwargs['mime_file'], self.__class__.get_file)
-        if 'mime_url' in kwargs:
-            self.enumerate(kwargs['mime_url'], self.__class__.get_url)
-        if kwargs['get_user_date']:
+        self.enumerate(mime_file, self.get_file)
+        self.enumerate(mime_url, self.get_url)
+        if get_user_date:
             message = self.get_string(get_instance_userdata())
             self.walk_message(message)
         os.chdir(olddir)
@@ -162,7 +161,7 @@ class MimeDecode(Command):
     def enumerate(self, sources_list, callback):
         if sources_list is not None and len(sources_list) > 0:
             for source in sources_list:
-                message = callback(self, source)
+                message = callback(source)
                 if message is not None:
                     self.walk_message(message)
 
@@ -340,64 +339,68 @@ MimeDecode.mime_action = {
 
 
 class MimeEncode(Command):
-    mimetypes_init = mimetypes.init()
+    mimetypes.init()
 
     def get_parser(self):
         parser = optparse.OptionParser()
         parser.add_option("-f", "--file", dest="file_list", help="Files to add", default=[], action="append")
         parser.add_option("-p", "--pack", dest="do_pack", help="needs to pack user date", default=False, action="store_true")
-        parser.add_option("-y", "--yaml_content", dest="yaml_content", help="The content as a yaml file", default=None, action="store")
+        parser.add_option("-y", "--yaml_content", dest="yaml_content_file", help="The content as a yaml file", default=None, action="store")
         return parser
 
-    def execute(self, args, **kwargs):
+    def execute(self, args, yaml_content_file=None, file_list=[], **kwargs):
         content = []
-        if kwargs['yaml_content'] is not None:
+        if yaml_content_file is not None:
+            # yaml is not a default module
+            # so import only when it's needed
             import yaml
             # the yaml file is an array of mime headers
-            with open(kwargs['yaml_content'], "r") as yaml_file:
+            with open(yaml_content_file, "r") as yaml_file:
                 yaml_content = yaml.safe_load(yaml_file)
-            print yaml_content
             for entry in yaml_content:
                 mimetype = None
                 file_name = None
                 contentencondig = None
                 source = None
                 entry_content = None
-                if 'file_name' in entry:
-                    file_name = entry['file_name']
-                    source = file_name
+                if 'source' in entry and 'content' in entry:
+                    print >> sys.stderr, "invalid entry, both source and content given, source is '%s'" % source
+                    continue
                 if 'source' in entry:
-                    source = entry['source']
+                    source = entry.pop('source')
+                    file_name = source
+                if 'file_name' in entry:
+                    file_name = entry.pop('file_name')
                 if source is not None:
                     with open(source) as fh:
                         entry_content = fh.read()
                 if 'content' in entry:
-                    entry_content = entry['content']
+                    entry_content = entry.pop('content')
                 if 'Content-Type' in entry:
                     mimetype = entry['Content-Type']
-                if 'Content-Transfer-Encoding' in entry:
-                    contentencondig = entry['Content-Transfer-Encoding']
+                if 'Content-Encoding' in entry:
+                    contentencondig = entry['Content-Encoding']
                 if mimetype is None:
-                    (mimetype, contentencondig) = mimetypes.guess_type(file_name, strict=False)
+                    (mimetype, contentencondig) = mimetypes.guess_type(source, strict=False)
 
+                print >> sys.stderr, "%s %s %s" % (file_name, mimetype, contentencondig)
                 content.append((file_name, entry_content, mimetype, contentencondig))
 
-        for file_name in kwargs['file_list']:
-            #try:
+        for file_name in file_list:
+            try:
                 # Try to split on ;
                 # the content type is after the ;
                 mime_guess = file_name.split(";")
-                if(len(mime_guess)) == 2:
+                if(len(mime_guess)) > 1:
                     mimetype = mime_guess[1]
                     contentencondig = None
                     file_name = mime_guess[0]
                 else:
                     (mimetype, contentencondig) = mimetypes.guess_type(file_name, strict=False)
-                print "%s %s %s" % (file_name, mimetype, contentencondig)
                 with open(file_name) as fh:
                     content.append((file_name, fh.read(), mimetype, contentencondig))
-            #except Exception as e:
-            #    print "error while parsing file %s: %s" % (file_name, e)
+            except Exception as e:
+                print "error while parsing file %s: %s" % (file_name, e)
                 
         if kwargs['do_pack']:
             print base64.b64encode(write_mime_multipart(content, compress=True))
