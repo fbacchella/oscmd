@@ -91,7 +91,7 @@ def main():
             raise e
 
     if options.listzone:
-        for z in context.conn.get_all_zones():
+        for z in context.cnx_ec2.get_all_zones():
             print "%s:%s" % (z.region.name, z.name)
         return 0
 
