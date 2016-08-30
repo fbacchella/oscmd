@@ -8,6 +8,7 @@ class Capacity(object):
         'Power': (8, 7, 0.75),
         'Large Memory': (6, 34.2, 1.15),
         'Maxi Memory': (8, 64, 2,3),
+        'Ultra Compute': (16, 30, 0),
         't1.micro': 'Mini',
         'm1.xlarge': 'Maxi',
         'm1.large': 'Large',
@@ -15,4 +16,5 @@ class Capacity(object):
         'm2.2xlarge': 'Large Memory',
         'm2.4xlarge': 'Maxi Memory',
         'c1.xlarge': 'Power',
+        'cc2.8xlarge': 'Ultra Compute',
     }
