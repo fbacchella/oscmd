@@ -10,7 +10,8 @@ from console import Console
 from attach import Attach
 from terminate import Terminate
 from windows import GetWindowsPassword
-import boto
+from storagegateway import StorageGateway
+import oslib.command
 
 from oslib.command import Command, GenericExist, List
 
@@ -47,6 +48,10 @@ class List(List):
     object = 'instance'
     verb = 'list'
 
-class_ref = [List, Dump, Start, SSH, Ping, Reboot, Terminate, Start, Stop, Summary, Offering, Associate, Exist, NewVolume, Console, Attach, GetWindowsPassword ]
+class_ref = [Dump, Start, SSH, Ping, Reboot, Terminate, Start, Stop, Summary, Offering, Associate, Exist, NewVolume, Console, Attach, GetWindowsPassword, StorageGateway]
+
+@oslib.command.command_info(object='instance', verb='list', class_ref=class_ref)
+class List(oslib.command.List):
+    pass
 
 import getrole

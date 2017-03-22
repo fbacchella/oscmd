@@ -60,19 +60,21 @@ class Command(object):
         """A default status command to run on success"""
         return 0;
 
+
 class Dump(Command):
     def validate(self, options):
-        if self.ec2_object.id or self.ec2_object.tag_name:
+        if self.ec2_object.id is not None or self.ec2_object.tag_name is not None:
             self.ec2_object.get()
             return True
         return True
 
     def execute(self, *args, **kwargs):
-        if self.ec2_object.id or self.ec2_object.tag_name:
+        if self.ec2_object.id is not None or self.ec2_object.tag_name is not None:
             yield self.ec2_object.get()
         else:
             for ec2_object in self.ec2_object.get_all(*args, **kwargs):
                 yield ec2_object
+
 
 class List(Dump):
     pattern = '%(id)s %(name)s'
@@ -93,12 +95,15 @@ class List(Dump):
         for ec2_object in super(List, self).execute(*args, **kwargs):
             if not showattributes:
                 yield ec2_object
-            else: 
-                yield ec2_object.__dict__
+            else:
+                if isinstance(ec2_object, dict):
+                    yield ec2_object
+                else:
+                    yield ec2_object.__dict__
                 break
                 
     def to_str(self, instance):
-        if instance.__class__ == {}.__class__:
+        if isinstance(instance, dict):
             print ", ".join(instance.keys())
         else:
             values_map = {}
@@ -116,6 +121,8 @@ class List(Dump):
                 value = None
                 if attr == 'name' and 'tags' in vars(instance) and 'Name' in instance.tags:
                     value = instance.tags['Name']
+                elif attr == 'name' and 'tag_name' in vars(instance):
+                    value = instance.tag_name
                 elif hasattr(instance, attr):
                     value = getattr(instance, attr)
                 if value == None:

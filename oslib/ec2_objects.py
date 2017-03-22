@@ -1,23 +1,51 @@
 import boto
+import boto3
 import boto.iam
 from boto.ec2.connection import EC2Connection
 
 from oslib import OSLibError
 
 ec2_objects = {}
+mapping = {}
 
 class OSDontExistError(OSLibError):
     pass
-    
+
+class object_info(object):
+    def __init__(self, get_all_func, can_tag=True, id_attr_name='id', get_all_ids=None, boto_class=None, name=None, client=None, resource=None):
+        self.attrs = {
+            'name': name,
+            'client': client,
+            'resource': resource,
+            'get_all_func': get_all_func,
+            'can_tag': can_tag,
+            'id_attr_name': id_attr_name,
+            'get_all_ids': get_all_ids,
+            'boto_class': boto_class
+        }
+
+    def __call__(self, clazz):
+        for (k, v) in self.attrs.items():
+            if k is not None:
+                setattr(clazz, k, v)
+            # ec2_objects[StorageGateway.name] = StorageGateway
+        ec2_objects[clazz.name] = clazz
+        mapping[self.attrs['boto_class']] = clazz
+        return clazz
+
+
 class EC2Object(object):
     can_tag = True
     id_attr_name = 'id'
     
     @staticmethod
     def identify(obj):
-        clazz =  mapping["%s.%s" % (obj.__class__.__module__, obj.__class__.__name__)]
-        return clazz
-    
+        class_name = "%s.%s" % (obj.__class__.__module__, obj.__class__.__name__)
+        if class_name in mapping:
+            return mapping[class_name]
+        else:
+            return obj.__class__
+
     """A abstract class, used to implements actual ec2 objects"""
     def __init__(self, context, **kwargs):
         self.ctxt = context
@@ -103,11 +131,10 @@ class EC2Object(object):
     def state(self):
         self.get().update(True)
         return self.get().state
-        
+
+
+@object_info(name = 'ami', get_all_func = EC2Connection.get_all_images, get_all_ids = 'image_ids', boto_class='boto.ec2.image.Image')
 class AMI(EC2Object):
-    name = 'ami'
-    get_all_func = EC2Connection.get_all_images
-    get_all_ids = 'image_ids'
 
     @staticmethod
     def set_parser(parser_object):
@@ -132,13 +159,10 @@ class AMI(EC2Object):
     def delete(self, delete_snapshot=False):
         self.get().deregister(delete_snapshot)
 
-ec2_objects[AMI.name] = AMI
 
+@object_info(name = 'instance', get_all_func = EC2Connection.get_all_instances, get_all_ids = 'instance_ids', boto_class='boto.ec2.instance.Instance')
 class Instance(EC2Object):
-    name = 'instance'
-    get_all_func = EC2Connection.get_all_instances
-    get_all_ids = 'instance_ids'
-    
+
     @staticmethod
     def set_parser(parser_object):
         parser_object.add_option("-s", "--self", dest="self_id", action='store_true', default=False, help="the instance is the running system")
@@ -184,7 +208,7 @@ class Instance(EC2Object):
     def reboot(self):
         self.get().reboot()
 
-ec2_objects[Instance.name] = Instance
+#ec2_objects[Instance.name] = Instance
 
 class EIP(EC2Object):
     can_tag = False
@@ -230,12 +254,14 @@ class SecurityGroup(EC2Object):
 
 ec2_objects[SecurityGroup.name] = SecurityGroup
 
+
 class Snapshot(EC2Object):
     name = 'snapshot'
     get_all_func = EC2Connection.get_all_snapshots
     get_all_ids = 'snapshot_ids'
 
 ec2_objects[Snapshot.name] = Snapshot
+
 
 class KeyPair(EC2Object):
     can_tag = False
@@ -250,9 +276,10 @@ class KeyPair(EC2Object):
 
     #key pairs don't have ids, only names
     def get_by_id(self, id):
-        return get_by_name(self, id)
+        return self.get_by_name(self, id)
 
 ec2_objects[KeyPair.name] = KeyPair
+
 
 class Iam(EC2Object):
     can_tag = False
@@ -278,12 +305,11 @@ class Iam(EC2Object):
 
 ec2_objects[Iam.name] = Iam
 
-mapping = {
-    "boto.ec2.instance.Instance": Instance,
-    "boto.ec2.image.Image": AMI,
+
+mapping.update({
     'boto.ec2.address.Address': EIP,
     'boto.ec2.snapshot.Snapshot': Snapshot,
     'boto.ec2.securitygroup.SecurityGroup': SecurityGroup,
     'boto.ec2.volume.Volume': Volume,
     'boto.iam.connection.IAMConnection': Iam,
-}
+})
