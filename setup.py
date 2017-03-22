@@ -15,7 +15,7 @@ setup(
     license = "Apache",
     keywords = "CLI Outscale VM AWS",
     install_requires=[
-        'boto', 'PyYAML', 'pycrypto'
+        'boto', 'boto3', 'PyYAML', 'pycrypto'
     ],
     url = "https://github.com/fbacchella/oscmd/",
     packages=['oslib', 'oslib.ami', 'oslib.eip', 'oslib.instance', 'oslib.volume', 'oslib.snapshot', 'oslib.securitygroup', 'oslib.keypair', 'oslib.resources', 'oslib.iam' ],

@@ -5,13 +5,11 @@ import sys
 # add boto module in PYTHONPATH if available
 import os.path as osp
 
-__botolibpath = osp.join(osp.dirname(__file__), '..', 'boto-2.14.0')
-if osp.isdir(__botolibpath):
-    sys.path.append(__botolibpath)
 
 import boto
 import oslib
 from oslib.ec2_objects import ec2_objects
+import oslib.b3_objects
 import optparse
 from oslib.context import Context
 import codecs

@@ -9,7 +9,8 @@ all_libs = (
     'instance',
     'securitygroup',
     'keypair',
-    'iam'
+    'iam',
+    'storagegateway'
 )
 
 objects = {}

@@ -3,6 +3,21 @@ import optparse
 from oslib import OSLibError
 from oslib.ec2_objects import EC2Object
 
+class command_info(object):
+    def __init__(self, object, verb, class_ref=None):
+        self.attrs = {
+            'object': object,
+            'verb': verb,
+        }
+        self.class_ref = class_ref
+
+    def __call__(self, clazz):
+        for (k, v) in self.attrs.items():
+            setattr(clazz, k, v)
+        if self.class_ref is not None:
+            self.class_ref.append(clazz)
+        return clazz
+
 class Command(object):
     """A abstract class, used to implements actual verb"""
     def __init__(self):

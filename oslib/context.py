@@ -1,4 +1,5 @@
 import boto
+import boto3
 from boto.ec2.connection import EC2Connection
 from boto.ec2.regioninfo import RegionInfo
 from boto.utils import retry_url
@@ -95,6 +96,16 @@ class Context(object):
         return RegionInfo(None, region_name, region_endpoint)
         
     @property
+    def b3s_sess(self):
+        if not '_b3s_sess' in self.__dict__ or not self._b3s_sess:
+            kwargs = {}
+            kwargs['aws_access_key_id'] = self.config.get('Credentials', 'aws_access_key_id',  None)
+            kwargs['aws_secret_access_key'] = self.config.get('Credentials', 'aws_secret_access_key',  None)
+            kwargs['region_name'] = self.get_region().name
+            self._b3s_sess = boto3.session.Session(**kwargs)
+        return self._b3s_sess
+
+    @property
     def cnx_ec2(self):
         if not '_cnx_ec2' in self.__dict__ or not self._cnx_ec2:
             kwargs = {}
@@ -121,4 +132,6 @@ class Context(object):
         account_id = self.config.get('Account','id')
         account_email = self.config.get('Account','email')
         return (account_id, account_email)
-        
+
+    def client(self, name):
+        return self.b3s_sess.client(name)
